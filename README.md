@@ -1,4 +1,4 @@
-# hello-again-couchapp
+# hello-couchapp-revisted
 
 The couchapp version of Hello, World!
 written January 2014 by [cygnyx](https://github.com/cygnyx)
@@ -7,7 +7,7 @@ written January 2014 by [cygnyx](https://github.com/cygnyx)
 
 This is a step-by-step guide to creating a 'Hello, World!' pure
 [CouchDB](http://couchdb.apache.org) application based on version 1.6.1.
-This version is a variation of [hello-couchapp](https://github.com/cygnyx/hello-couchapp).
+This version is a variation of [hello-again-couchapp](https://github.com/cygnyx/hello-again-couchapp).
 The guide is followed by a general explanation of what is going on.
 
 # Preliminaries
@@ -56,28 +56,49 @@ Replace the default text with:
    "rewrites": [
        {
            "from": "/",
-           "to": "_show/hello"
+           "to": "_show/field",
+           "query": {
+               "name": "index.html"
+           }
        },
        {
            "from": "/index.html",
-           "to": "_show/hello"
+           "to": "_show/field",
+           "query": {
+               "name": "index.html"
+           }
+       },
+       {
+           "from": "/style/:name",
+           "to": "_show/field",
+           "query": {
+               "name": ":name",
+               "type": "text/css"
+           }
+       },
+       {
+           "from": "/script/:name",
+           "to": "_show/field",
+           "query": {
+               "name": ":name",
+               "type": "text/javascript"
+           }
        },
        {
            "from": "*",
-           "to": "_show/notfound"
+           "to": "_show/field",
+           "query": {
+               "name": "notfound.html"
+           }
        }
    ],
    "shows": {
-       "hello": "function(doc, req) { return require('main').show.call(this, req) }",
-       "notfound": "function(doc, req) { return require('main').show.call(this, req) }"
+       "field": "function(doc, req) { var q=req.query; return {body: this[q.name] || '', headers: {'Content-Type': q.type || 'text/html'}}}"
    },
-   "main": "!(function() {\n\n  var main = {\n    cache: {},\n    factory: function(ref, option) {\n       if (typeof ref == \"undefined\" || ref == '') return ''\n       if (main.cache[ref]) return main.cache[ref].call(this, option)\n       var str = this[ref] || option[ref] || ''\n       if (str == '') return ''\n       str = str.replace(/[\\t\\r\\n]/g, \" \")\n         .replace(/<%=/g, \"'+options.\")\n         .replace(/%>/g, \"+'\")\n       main.cache[ref] = new Function(\"options\", \"return '\" + str + \"'\")\n       return main.cache[ref].call(this, option)\n     },\n     hello: function() {\n       return main.format.call(this, this.hello)\n     },\n     notfound: function() {\n       return main.format.call(this, this.notfound)\n     },\n     format: function(title) {\n       return main.factory.call(this, 'document_template', {title: title})\n     },\n     show: function(req) {\n       return {\n         body: main[req.path[4]].call(this),\n         headers: this.responseheader\n       }\n     }\n  }\n\n  module.exports = main\n}).call(this)\n",
-   "hello": "Hello, World!",
-   "notfound": "404 - Document not found",
-   "responseheader": {
-       "Content-Type": "text/html"
-   },
-   "document_template": "<!DOCTYPE html>\n<html lang=\"en\" class=\"\">\n<head>\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Language\" content=\"en\">\n<meta name=\"viewport\" content=\"initial-scale=1\">\n<style>\nbody {\n  background-color: ivory;\n}\nh1 {\n  text-align: center;\n  padding: 4em;\n}\n</style>\n<title><%=title%></title>\n</head>\n<body>\n<h1><%=title%></h1>\n</body>\n</html>\n"
+   "index.html": "<!DOCTYPE html>\n<html lang=\"en\" class=\"\">\n<head>\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Language\" content=\"en\">\n<meta name=\"viewport\" content=\"initial-scale=1\">\n<link rel=\"stylesheet\" href=\"style/main.css\" type=\"text/css\">\n<script src=\"https://code.jquery.com/jquery-2.1.3.min.js\"></script>\n<script src=\"script/app.js\"></script>\n</head>\n<body>\n</body>\n</html>\n",
+   "notfound.html": "<!DOCTYPE html>\n<html lang=\"en\" class=\"\">\n<head>\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Language\" content=\"en\">\n<meta name=\"viewport\" content=\"initial-scale=1\">\n<link rel=\"stylesheet\" href=\"style/main.css\" type=\"text/css\">\n<title>Not Found</title>\n</head>\n<body>\n<h1>Not Found</h1>\n</body>\n</html>\n",
+   "main.css": "body { background-color: ivory; }\n\nh1 { text-align: center; padding: 4em; }\n",
+   "app.js": "(function() {\n  document.title = 'Hello, World!'\n  document.body.innerHTML = '<h1>' + document.title + '</h1>'\n})()\n"
 }
 ```
 
@@ -161,34 +182,35 @@ The document also has a `_rev` field which is a monotonically increasing
 number, a hypen, and a hash value combined.
 
 We added rules for
-translating URLs into URIs. The structure of these rules is defined by
-`CouchDB`. These rules translate `/` and `/index.html` to a reference to
-`_show/hello` and all other URLs go to `_show/notfound`.
+translating URLs into URIs.
 These rules are located in the field named `rewrites`.
+The structure of these rules is defined by
+`CouchDB`.
+The first rules translate `/` and `/index.html` to a reference to
+`_show/field` with a name query parameter.
+The next 2 rules translate the paths `/style` and `/script` to
+`_show/field` with the name parameter and a type of `text/css` and
+`text/javascript`, respectively.
+The final rule translates all others paths to `_show/field` with
+a name query parameter.
+All of the rewrites go to the same `show` function called `field`.
 
-We added anonymous javascript functions to process the two `_show`
-commands in the field named `shows`. In this case, both functions
-delegrate their implementation to the `show` function in the
-`CommonJS` module in the field named `main`.
+We add an anonymous javascript function to process the `_show/field`
+command in the field named `shows`.
+`field` extracts a single field from the design document and
+identifies the appropriate type: style documents are `text/css` and
+script documents are `text/javascript`.
 
-`CouchDB` supports `CommonJS` modules. When you inspect the `main`
-field in Futon, you will see that it is much more readable than the
-original `JSON`. Futon converts between multi-line embedded strings
-multi-line text fields. The `main` module includes a factory for
-building template functions. The templates are scanned for the
-`<%=value%>` pattern. It generates the function to look up values
-in the options argument.
+That completes the server side logic of this application.
+The remainder of the application relies on the browser.
 
-The `hello` and `notfound` functions delegate to `format` passing
-in the text from their respective fields. `format` applies the
-template to the title.
-Note how text fields can be located in the
-`JSON` object. 
+The field `notfound.html` has a complete HTML document for missing pages.
 
-The `show` function calls the appropriate function based on the
-request path element.
-Note how the entire response header field is located in the
-`JSON` object.
+The field `index.html` has the HTML boilerplate for the application itself.
+Note that the `head` section doesn't have a `title` and the `body` is empty.
+But the document makes 2 requests back to the server for the `main.css` and
+`app.js`. The CSS applies some simple formatting and the script adds
+the title and fills in the body of the document.
 
 Finally, the app is wired together by adding an entry to the vhosts
 configuration. This routes anything with the hostname 'hello' to
@@ -199,7 +221,8 @@ the rules in the design document.
 
 ## Next
 
-These steps build a simple Hello, World! website.
+These steps build a simple Hello, World! website with an emphasis
+on having the browser handle more of the work.
 Adding more complex URL rewriting rules can make documents part of
 your website. The principal idea of a `CouchApp` is to provide enough
 infrastructure to deliver HTML files that are needed by
@@ -207,17 +230,14 @@ websites to enable dynamic access to the data documents in `CouchDB`.
 Since `CouchDB` uses HTTP protocol and JSON documents, it works well
 with Ajax based websites.
 
-Since `CouchDB` supports `CommonJS` modules, entire libraries can be
-included in the design document. For example a more complex application
-can might use the [Mustache](https://mustache.github.io) for a template
-engine by copying the mustache.min.js into the `mustache` field. Then
-the template library can be used by `require('mustache')` to access it.
+In this example, the JSON design document is used for 2 purposes:
+interfacing with the `CouchApp` API and packaging source files.
+The fields used for the API are: `_id`, `_rev`, `rewrites`, `shows`.
+All the other fields are text documents encoded in a JSON object
+that package the application. For standalone applications,
+a reasonable development method
+would be to have these text documents on the local file system
+and then cut-and-paste them to deploy them on `CouchDB`.
 
-Special care must be used when making function calls. In the `shows`
-functions, `this` refers to the design document. The `doc` parameter
-refers to the `JSON` document uploaded (if any).
-
-Futon provides very limited editting capabilities. Nevertheless it
-is possible to use it to develop simple applications. Including
-`CommonJS` modules is also relatively straight forward which can be
-used to expand application functionality.
+Futon provides very limited editing capabilities. Nevertheless it
+is possible to use it to develop simple applications.
